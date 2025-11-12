@@ -1,0 +1,220 @@
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+
+// Helper function to get auth token
+const getAuthToken = () => {
+  return localStorage.getItem('authToken');
+};
+
+// Helper function to make authenticated requests
+const authFetch = async (url: string, options: RequestInit = {}) => {
+  const token = getAuthToken();
+  const headers: HeadersInit = {
+    'Content-Type': 'application/json',
+    ...(options.headers || {}),
+  };
+
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  const response = await fetch(url, {
+    ...options,
+    headers,
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: 'Request failed' }));
+    throw new Error(error.error || 'Request failed');
+  }
+
+  return response.json();
+};
+
+// ============= AUTHENTICATION =============
+
+export const authAPI = {
+  register: async (data: { email: string; password: string; name: string }) => {
+    const response = await fetch(`${API_BASE_URL}/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Registration failed');
+    }
+
+    const result = await response.json();
+    localStorage.setItem('authToken', result.token);
+    localStorage.setItem('user', JSON.stringify(result.user));
+    return result;
+  },
+
+  login: async (data: { email: string; password: string }) => {
+    const response = await fetch(`${API_BASE_URL}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Login failed');
+    }
+
+    const result = await response.json();
+    localStorage.setItem('authToken', result.token);
+    localStorage.setItem('user', JSON.stringify(result.user));
+    return result;
+  },
+
+  logout: () => {
+    localStorage.removeItem('authToken');
+    localStorage.removeItem('user');
+  },
+
+  getProfile: async () => {
+    return authFetch(`${API_BASE_URL}/user/profile`);
+  },
+
+  isAuthenticated: () => {
+    return !!getAuthToken();
+  },
+
+  getUser: () => {
+    const userStr = localStorage.getItem('user');
+    return userStr ? JSON.parse(userStr) : null;
+  },
+};
+
+// ============= CLINICS =============
+
+export const clinicsAPI = {
+  getAll: async () => {
+    const response = await fetch(`${API_BASE_URL}/clinics`);
+    if (!response.ok) throw new Error('Failed to fetch clinics');
+    return response.json();
+  },
+
+  getById: async (id: string) => {
+    const response = await fetch(`${API_BASE_URL}/clinics/${id}`);
+    if (!response.ok) throw new Error('Failed to fetch clinic');
+    return response.json();
+  },
+
+  search: async (location: string) => {
+    const response = await fetch(`${API_BASE_URL}/clinics/search`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ location }),
+    });
+    if (!response.ok) throw new Error('Failed to search clinics');
+    return response.json();
+  },
+
+  getNearby: async (lat: number, lng: number, maxDistance?: number) => {
+    const response = await fetch(`${API_BASE_URL}/clinics/nearby`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ lat, lng, maxDistance }),
+    });
+    if (!response.ok) throw new Error('Failed to fetch nearby clinics');
+    return response.json();
+  },
+};
+
+// ============= DOCTORS =============
+
+export const doctorsAPI = {
+  getAll: async () => {
+    const response = await fetch(`${API_BASE_URL}/doctors`);
+    if (!response.ok) throw new Error('Failed to fetch doctors');
+    return response.json();
+  },
+
+  getById: async (id: string) => {
+    const response = await fetch(`${API_BASE_URL}/doctors/${id}`);
+    if (!response.ok) throw new Error('Failed to fetch doctor');
+    return response.json();
+  },
+
+  getAvailability: async (id: string) => {
+    const response = await fetch(`${API_BASE_URL}/doctors/${id}/availability`);
+    if (!response.ok) throw new Error('Failed to fetch availability');
+    return response.json();
+  },
+};
+
+// ============= APPOINTMENTS =============
+
+export const appointmentsAPI = {
+  create: async (data: {
+    doctorId: string;
+    date: string;
+    time: string;
+    reason: string;
+    name: string;
+    email: string;
+    phone: string;
+  }) => {
+    return authFetch(`${API_BASE_URL}/appointments`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  getAll: async () => {
+    return authFetch(`${API_BASE_URL}/appointments`);
+  },
+
+  getById: async (id: string) => {
+    return authFetch(`${API_BASE_URL}/appointments/${id}`);
+  },
+
+  update: async (id: string, data: { date?: string; time?: string; reason?: string; status?: string }) => {
+    return authFetch(`${API_BASE_URL}/appointments/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  },
+
+  cancel: async (id: string) => {
+    return authFetch(`${API_BASE_URL}/appointments/${id}`, {
+      method: 'DELETE',
+    });
+  },
+};
+
+// ============= SYMPTOMS =============
+
+export const symptomsAPI = {
+  analyze: async (symptoms: string, userId?: string) => {
+    const response = await fetch(`${API_BASE_URL}/symptoms/analyze`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ symptoms, userId }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Analysis failed');
+    }
+
+    return response.json();
+  },
+
+  getHistory: async () => {
+    return authFetch(`${API_BASE_URL}/symptoms/history`);
+  },
+};
+
+// ============= HEALTH CHECK =============
+
+export const healthAPI = {
+  check: async () => {
+    const response = await fetch(`${API_BASE_URL}/health`);
+    if (!response.ok) throw new Error('Health check failed');
+    return response.json();
+  },
+};

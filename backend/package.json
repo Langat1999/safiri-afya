@@ -1,0 +1,27 @@
+{
+  "name": "safiri-afya-backend",
+  "version": "1.0.0",
+  "description": "Backend API for Safiri Afya healthcare platform",
+  "main": "src/server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js"
+  },
+  "keywords": [
+    "healthcare",
+    "api",
+    "kenya"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "express": "^5.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "lowdb": "^7.0.1",
+    "uuid": "^13.0.0"
+  }
+}

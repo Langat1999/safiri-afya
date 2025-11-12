@@ -5,6 +5,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { AlertCircle, CheckCircle, Clock, Sparkles } from "lucide-react";
 import { toast } from "sonner";
+import { symptomsAPI } from "@/services/api";
 
 interface SymptomCheckerProps {
   language: 'en' | 'sw';
@@ -15,8 +16,9 @@ export const SymptomChecker = ({ language }: SymptomCheckerProps) => {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [result, setResult] = useState<{
     urgency: 'low' | 'medium' | 'high';
-    suggestions: string[];
-    nextSteps: string;
+    condition: string;
+    recommendations: string[];
+    disclaimer: string;
   } | null>(null);
 
   const content = {
@@ -59,32 +61,26 @@ export const SymptomChecker = ({ language }: SymptomCheckerProps) => {
     }
 
     setIsAnalyzing(true);
-    
-    // Simulate AI analysis
-    setTimeout(() => {
-      // Mock result - in production, this would call a real AI service
-      const mockResult = {
-        urgency: Math.random() > 0.7 ? 'high' : Math.random() > 0.4 ? 'medium' : 'low' as 'low' | 'medium' | 'high',
-        suggestions: language === 'en' 
-          ? [
-              "Stay hydrated and rest",
-              "Monitor your temperature",
-              "Consider over-the-counter pain relief",
-            ]
-          : [
-              "Kunywa maji mengi na kupumzika",
-              "Fuatilia joto lako",
-              "Fikiria dawa za kupunguza maumivu",
-            ],
-        nextSteps: language === 'en'
-          ? "Based on your symptoms, we recommend booking an appointment with a healthcare provider within 24-48 hours."
-          : "Kulingana na dalili zako, tunashauri kuweka miadi na mtoa huduma za afya ndani ya masaa 24-48.",
-      };
 
-      setResult(mockResult);
-      setIsAnalyzing(false);
+    try {
+      const analysisResult = await symptomsAPI.analyze(symptoms);
+
+      setResult({
+        urgency: analysisResult.urgency,
+        condition: analysisResult.condition,
+        recommendations: analysisResult.recommendations,
+        disclaimer: analysisResult.disclaimer,
+      });
+
       toast.success(language === 'en' ? "Analysis complete!" : "Uchambuzi umekamilika!");
-    }, 2000);
+    } catch (error) {
+      toast.error(language === 'en'
+        ? "Failed to analyze symptoms. Please try again."
+        : "Imeshindwa kuchambanua dalili. Tafadhali jaribu tena.");
+      console.error('Symptom analysis error:', error);
+    } finally {
+      setIsAnalyzing(false);
+    }
   };
 
   const getUrgencyColor = (urgency: string) => {
@@ -157,34 +153,41 @@ export const SymptomChecker = ({ language }: SymptomCheckerProps) => {
                     </Badge>
                   </div>
 
+                  <div className="p-3 bg-primary/10 rounded-lg">
+                    <h4 className="font-semibold text-foreground mb-1">
+                      {language === 'en' ? 'Possible Condition:' : 'Hali Inayowezekana:'}
+                    </h4>
+                    <p className="text-sm text-foreground">{result.condition}</p>
+                  </div>
+
                   <div className="space-y-2">
                     <h4 className="font-semibold text-foreground">
                       {language === 'en' ? 'Recommendations:' : 'Mapendekezo:'}
                     </h4>
                     <ul className="space-y-2">
-                      {result.suggestions.map((suggestion, index) => (
+                      {result.recommendations.map((recommendation, index) => (
                         <li key={index} className="flex items-start gap-2 text-sm text-muted-foreground">
                           <CheckCircle className="w-4 h-4 mt-0.5 text-primary flex-shrink-0" />
-                          <span>{suggestion}</span>
+                          <span>{recommendation}</span>
                         </li>
                       ))}
                     </ul>
                   </div>
 
-                  <div className="p-4 bg-muted rounded-lg">
-                    <p className="text-sm text-foreground">{result.nextSteps}</p>
+                  <div className="p-4 bg-muted rounded-lg border-l-4 border-yellow-500">
+                    <p className="text-xs text-muted-foreground italic">{result.disclaimer}</p>
                   </div>
 
                   <div className="flex flex-col sm:flex-row gap-3">
-                    <Button 
-                      variant="default" 
+                    <Button
+                      variant="default"
                       className="flex-1"
                       onClick={() => document.getElementById('book-doctor')?.scrollIntoView({ behavior: 'smooth' })}
                     >
                       {t.bookAppointment}
                     </Button>
-                    <Button 
-                      variant="secondary" 
+                    <Button
+                      variant="secondary"
                       className="flex-1"
                       onClick={() => document.getElementById('clinic-locator')?.scrollIntoView({ behavior: 'smooth' })}
                     >

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -7,9 +7,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Calendar, Clock, User, Mail, Phone } from "lucide-react";
 import { toast } from "sonner";
+import { doctorsAPI, appointmentsAPI, authAPI } from "@/services/api";
 
 interface BookingFormProps {
   language: 'en' | 'sw';
+}
+
+interface Doctor {
+  id: string;
+  name: string;
+  specialty: string;
+  availability: string[];
 }
 
 export const BookingForm = ({ language }: BookingFormProps) => {
@@ -22,6 +30,27 @@ export const BookingForm = ({ language }: BookingFormProps) => {
     doctor: "",
     reason: "",
   });
+  const [doctors, setDoctors] = useState<Doctor[]>([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  // Load doctors and check auth on mount
+  useEffect(() => {
+    const loadDoctors = async () => {
+      try {
+        const data = await doctorsAPI.getAll();
+        setDoctors(data);
+      } catch (error) {
+        toast.error(language === 'en'
+          ? "Failed to load doctors"
+          : "Imeshindwa kupakia madaktari");
+        console.error('Error loading doctors:', error);
+      }
+    };
+
+    setIsAuthenticated(authAPI.isAuthenticated());
+    loadDoctors();
+  }, [language]);
 
   const content = {
     en: {
@@ -38,6 +67,8 @@ export const BookingForm = ({ language }: BookingFormProps) => {
       submitting: "Booking...",
       success: "Appointment booked successfully!",
       error: "Please fill in all fields",
+      authRequired: "Please create an account to book appointments",
+      loginPrompt: "Login or Register",
     },
     sw: {
       title: "Weka Miadi",
@@ -53,32 +84,66 @@ export const BookingForm = ({ language }: BookingFormProps) => {
       submitting: "Inaweka...",
       success: "Miadi imewekwa kwa mafanikio!",
       error: "Tafadhali jaza sehemu zote",
+      authRequired: "Tafadhali fungua akaunti ili kuweka miadi",
+      loginPrompt: "Ingia au Jiandikishe",
     },
   };
 
   const t = content[language];
 
-  const doctors = language === 'en' 
-    ? ["Dr. Sarah Kamau - General Practice", "Dr. James Ochieng - Pediatrics", "Dr. Mary Wanjiku - Maternal Health"]
-    : ["Dk. Sarah Kamau - Matibabu ya Jumla", "Dk. James Ochieng - Watoto", "Dk. Mary Wanjiku - Afya ya Mama"];
-
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     // Basic validation
     if (Object.values(formData).some(value => !value)) {
       toast.error(t.error);
       return;
     }
 
+    // Check authentication
+    if (!isAuthenticated) {
+      toast.error(t.authRequired + " - " + t.loginPrompt);
+      // For demo purposes, auto-register a demo user
+      try {
+        await authAPI.register({
+          name: formData.name,
+          email: formData.email,
+          password: "demo123",  // Demo password
+        });
+        setIsAuthenticated(true);
+        toast.success(language === 'en'
+          ? "Demo account created! Booking appointment..."
+          : "Akaunti ya demo imeundwa! Inaweka miadi...");
+      } catch (error: any) {
+        // If user exists, try to login or proceed anyway
+        console.log('Auto-register failed:', error.message);
+      }
+    }
+
     setIsSubmitting(true);
-    
-    // Simulate booking
-    setTimeout(() => {
+
+    try {
+      // Find doctor ID from the selected doctor name
+      const selectedDoctor = doctors.find(d => formData.doctor.includes(d.name));
+
+      if (!selectedDoctor) {
+        toast.error(language === 'en' ? "Invalid doctor selection" : "Chaguo la daktari si sahihi");
+        setIsSubmitting(false);
+        return;
+      }
+
+      await appointmentsAPI.create({
+        doctorId: selectedDoctor.id,
+        date: formData.date,
+        time: formData.time,
+        reason: formData.reason,
+        name: formData.name,
+        email: formData.email,
+        phone: formData.phone,
+      });
+
       toast.success(t.success);
-      setIsSubmitting(false);
+
       // Reset form
       setFormData({
         name: "",
@@ -89,7 +154,14 @@ export const BookingForm = ({ language }: BookingFormProps) => {
         doctor: "",
         reason: "",
       });
-    }, 1500);
+    } catch (error: any) {
+      toast.error(error.message || (language === 'en'
+        ? "Failed to book appointment"
+        : "Imeshindwa kuweka miadi"));
+      console.error('Booking error:', error);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -194,9 +266,9 @@ export const BookingForm = ({ language }: BookingFormProps) => {
                       <SelectValue placeholder={language === 'en' ? "Choose a doctor" : "Chagua daktari"} />
                     </SelectTrigger>
                     <SelectContent>
-                      {doctors.map((doctor, index) => (
-                        <SelectItem key={index} value={doctor}>
-                          {doctor}
+                      {doctors.map((doctor) => (
+                        <SelectItem key={doctor.id} value={`${doctor.name} - ${doctor.specialty}`}>
+                          {doctor.name} - {doctor.specialty}
                         </SelectItem>
                       ))}
                     </SelectContent>
