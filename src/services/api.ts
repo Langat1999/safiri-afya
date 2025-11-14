@@ -86,6 +86,57 @@ export const authAPI = {
     const userStr = localStorage.getItem('user');
     return userStr ? JSON.parse(userStr) : null;
   },
+
+  refreshToken: async () => {
+    return authFetch(`${API_BASE_URL}/auth/refresh`, {
+      method: 'POST',
+    });
+  },
+
+  forgotPassword: async (email: string) => {
+    const response = await fetch(`${API_BASE_URL}/auth/forgot-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to request password reset');
+    }
+
+    return response.json();
+  },
+
+  verifyResetCode: async (email: string, code: string) => {
+    const response = await fetch(`${API_BASE_URL}/auth/verify-reset-code`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, code }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Invalid reset code');
+    }
+
+    return response.json();
+  },
+
+  resetPassword: async (email: string, code: string, newPassword: string) => {
+    const response = await fetch(`${API_BASE_URL}/auth/reset-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, code, newPassword }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to reset password');
+    }
+
+    return response.json();
+  },
 };
 
 // ============= CLINICS =============
@@ -189,11 +240,11 @@ export const appointmentsAPI = {
 // ============= SYMPTOMS =============
 
 export const symptomsAPI = {
-  analyze: async (symptoms: string, userId?: string) => {
+  analyze: async (symptoms: string, userId?: string, ageRange?: string, gender?: string) => {
     const response = await fetch(`${API_BASE_URL}/symptoms/analyze`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ symptoms, userId }),
+      body: JSON.stringify({ symptoms, userId, ageRange, gender }),
     });
 
     if (!response.ok) {

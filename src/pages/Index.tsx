@@ -1,35 +1,18 @@
-import { useState } from "react";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { Hero } from "@/components/Hero";
 import { SymptomChecker } from "@/components/SymptomChecker";
 import { ClinicLocator } from "@/components/ClinicLocator";
 import { BookingForm } from "@/components/BookingForm";
 import { HealthPrompt } from "@/components/HealthPrompt";
-import { LanguageToggle } from "@/components/LanguageToggle";
+import { Navbar } from "@/components/Navbar";
 import { Heart } from "lucide-react";
 
 const Index = () => {
-  const [language, setLanguage] = useState<'en' | 'sw'>('en');
-
-  const toggleLanguage = () => {
-    setLanguage(prev => prev === 'en' ? 'sw' : 'en');
-  };
+  const { language } = useLanguage();
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="container flex h-16 items-center justify-between px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center gap-2">
-            <div className="p-2 rounded-lg bg-primary/10">
-              <Heart className="w-6 h-6 text-primary" />
-            </div>
-            <h1 className="text-xl font-bold text-foreground">
-              {language === 'en' ? 'Afya Karibu Kenya' : 'Afya Karibu Kenya'}
-            </h1>
-          </div>
-          <LanguageToggle language={language} onToggle={toggleLanguage} />
-        </div>
-      </header>
+      <Navbar />
 
       {/* Main Content */}
       <main>

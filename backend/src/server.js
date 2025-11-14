@@ -15,6 +15,8 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
 const PORT = process.env.PORT || 3001;
 const JWT_SECRET = process.env.JWT_SECRET || 'safiri-afya-secret-key-change-in-production';
+const HF_API_TOKEN = process.env.HF_API_TOKEN;
+const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 
 // Middleware
 app.use(cors());
@@ -143,6 +145,152 @@ app.get('/api/user/profile', authenticateToken, async (req, res) => {
       name: user.name,
       createdAt: user.createdAt
     });
+  } catch (error) {
+    res.status(500).json({ error: 'Server error: ' + error.message });
+  }
+});
+
+// Refresh token
+app.post('/api/auth/refresh', authenticateToken, async (req, res) => {
+  try {
+    // Generate new token with extended expiry
+    const token = jwt.sign({ id: req.user.id, email: req.user.email }, JWT_SECRET, { expiresIn: '7d' });
+
+    res.json({
+      message: 'Token refreshed successfully',
+      token
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Server error: ' + error.message });
+  }
+});
+
+// Request password reset
+app.post('/api/auth/forgot-password', async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ error: 'Email is required' });
+    }
+
+    await db.read();
+
+    // Check if user exists
+    const user = db.data.users.find(u => u.email === email);
+    if (!user) {
+      // Don't reveal if user exists or not for security
+      return res.json({ message: 'If the email exists, a reset code has been sent.' });
+    }
+
+    // Generate reset token (6-digit code)
+    const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const resetExpiry = new Date(Date.now() + 3600000).toISOString(); // 1 hour expiry
+
+    // Initialize passwordResets array if it doesn't exist
+    if (!db.data.passwordResets) {
+      db.data.passwordResets = [];
+    }
+
+    // Store reset code
+    db.data.passwordResets = db.data.passwordResets.filter(r => r.email !== email);
+    db.data.passwordResets.push({
+      email,
+      code: resetCode,
+      expiresAt: resetExpiry,
+      createdAt: new Date().toISOString()
+    });
+
+    await db.write();
+
+    // In production, send this via email
+    // For now, we'll return it in the response (NOT SECURE - FOR DEMO ONLY)
+    console.log(`Password reset code for ${email}: ${resetCode}`);
+
+    res.json({
+      message: 'If the email exists, a reset code has been sent.',
+      // Remove this in production - only for demo
+      resetCode: resetCode
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Server error: ' + error.message });
+  }
+});
+
+// Verify reset code
+app.post('/api/auth/verify-reset-code', async (req, res) => {
+  try {
+    const { email, code } = req.body;
+
+    if (!email || !code) {
+      return res.status(400).json({ error: 'Email and code are required' });
+    }
+
+    await db.read();
+
+    const resetRequest = db.data.passwordResets?.find(
+      r => r.email === email && r.code === code
+    );
+
+    if (!resetRequest) {
+      return res.status(400).json({ error: 'Invalid reset code' });
+    }
+
+    // Check if code has expired
+    if (new Date() > new Date(resetRequest.expiresAt)) {
+      return res.status(400).json({ error: 'Reset code has expired' });
+    }
+
+    res.json({ message: 'Code verified successfully' });
+  } catch (error) {
+    res.status(500).json({ error: 'Server error: ' + error.message });
+  }
+});
+
+// Reset password
+app.post('/api/auth/reset-password', async (req, res) => {
+  try {
+    const { email, code, newPassword } = req.body;
+
+    if (!email || !code || !newPassword) {
+      return res.status(400).json({ error: 'Email, code, and new password are required' });
+    }
+
+    await db.read();
+
+    // Verify reset code
+    const resetRequest = db.data.passwordResets?.find(
+      r => r.email === email && r.code === code
+    );
+
+    if (!resetRequest) {
+      return res.status(400).json({ error: 'Invalid reset code' });
+    }
+
+    // Check if code has expired
+    if (new Date() > new Date(resetRequest.expiresAt)) {
+      return res.status(400).json({ error: 'Reset code has expired' });
+    }
+
+    // Find user and update password
+    const userIndex = db.data.users.findIndex(u => u.email === email);
+    if (userIndex === -1) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Hash new password
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    db.data.users[userIndex].password = hashedPassword;
+    db.data.users[userIndex].updatedAt = new Date().toISOString();
+
+    // Remove used reset code
+    db.data.passwordResets = db.data.passwordResets.filter(
+      r => !(r.email === email && r.code === code)
+    );
+
+    await db.write();
+
+    res.json({ message: 'Password reset successfully' });
   } catch (error) {
     res.status(500).json({ error: 'Server error: ' + error.message });
   }
@@ -408,10 +556,103 @@ app.delete('/api/appointments/:id', authenticateToken, async (req, res) => {
 
 // ============= SYMPTOM CHECKER ENDPOINT =============
 
+// Helper function to call OpenRouter AI
+async function analyzeWithAI(symptoms, ageRange, gender) {
+  const systemPrompt = `You are a medical assistant AI.
+Task: Assess the user's symptoms and classify risk as Low, Medium, or High.
+Provide simple, safe home-care tips, and advise when to see a healthcare professional.
+Respond in English or Swahili depending on user input.
+Always include: "This is not a substitute for professional medical care."
+
+Format your response as JSON with the following structure:
+{
+  "urgency": "low" | "medium" | "high",
+  "condition": "Brief description of likely condition",
+  "recommendations": ["recommendation 1", "recommendation 2", "recommendation 3"]
+}`;
+
+  const userMessage = `Patient Information:
+Age Range: ${ageRange || 'not specified'}
+Gender: ${gender || 'not specified'}
+
+Symptoms: ${symptoms}
+
+Please analyze these symptoms and provide a risk assessment in JSON format.`;
+
+  try {
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://safiri-afya.com', // Optional - your site URL
+        'X-Title': 'Safiri Afya Health App', // Optional - your app name
+      },
+      body: JSON.stringify({
+        model: 'mistralai/mistral-7b-instruct:free', // Free Mistral 7B model
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userMessage }
+        ],
+        temperature: 0.7,
+        max_tokens: 500,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('OpenRouter API Error:', errorText);
+      throw new Error(`OpenRouter API error: ${response.status} - ${errorText}`);
+    }
+
+    const data = await response.json();
+    const aiResponse = data.choices[0].message.content;
+
+    console.log('AI Response:', aiResponse);
+
+    // Try to parse JSON from the response
+    let parsedResponse;
+    try {
+      // Extract JSON if it's wrapped in markdown code blocks
+      const jsonMatch = aiResponse.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        parsedResponse = JSON.parse(jsonMatch[0]);
+      } else {
+        parsedResponse = JSON.parse(aiResponse);
+      }
+
+      // Ensure urgency is lowercase
+      if (parsedResponse.urgency) {
+        parsedResponse.urgency = parsedResponse.urgency.toLowerCase();
+      }
+    } catch (parseError) {
+      console.error('JSON parsing error:', parseError);
+      // If parsing fails, extract information from text
+      const urgencyMatch = aiResponse.toLowerCase().match(/\b(low|medium|high)\s*(risk|urgency|priority)?/i);
+      const urgency = urgencyMatch ? urgencyMatch[1].toLowerCase() : 'medium';
+
+      parsedResponse = {
+        urgency: urgency,
+        condition: 'Based on your symptoms',
+        recommendations: [
+          'Consult a healthcare professional for proper diagnosis',
+          'Monitor your symptoms closely',
+          'Seek medical attention if symptoms worsen'
+        ]
+      };
+    }
+
+    return parsedResponse;
+  } catch (error) {
+    console.error('AI analysis error:', error);
+    throw error;
+  }
+}
+
 // Analyze symptoms
 app.post('/api/symptoms/analyze', async (req, res) => {
   try {
-    const { symptoms, userId } = req.body;
+    const { symptoms, userId, ageRange, gender } = req.body;
 
     if (!symptoms) {
       return res.status(400).json({ error: 'Symptoms description is required' });
@@ -419,55 +660,43 @@ app.post('/api/symptoms/analyze', async (req, res) => {
 
     await db.read();
 
-    // Simple keyword-based analysis (In production, integrate with AI/ML model)
-    let urgency = 'low';
-    let condition = 'Common Cold or Flu';
-    let recommendations = [
-      'Rest and stay hydrated',
-      'Monitor your symptoms',
-      'Take over-the-counter medication if needed'
-    ];
+    let urgency, condition, recommendations;
 
-    const symptomsLower = symptoms.toLowerCase();
-
-    // High urgency keywords
-    if (symptomsLower.includes('chest pain') ||
-        symptomsLower.includes('difficulty breathing') ||
-        symptomsLower.includes('severe bleeding') ||
-        symptomsLower.includes('unconscious') ||
-        symptomsLower.includes('stroke')) {
-      urgency = 'high';
-      condition = 'Potentially Serious Condition';
-      recommendations = [
-        'Seek immediate medical attention',
-        'Call emergency services or go to the nearest hospital',
-        'Do not delay treatment'
-      ];
-    }
-    // Medium urgency keywords
-    else if (symptomsLower.includes('high fever') ||
-             symptomsLower.includes('persistent pain') ||
-             symptomsLower.includes('vomiting') ||
-             symptomsLower.includes('diarrhea') ||
-             symptomsLower.includes('rash')) {
-      urgency = 'medium';
-      condition = 'Moderate Condition Requiring Attention';
-      recommendations = [
-        'Schedule an appointment with a healthcare provider',
-        'Monitor symptoms closely',
-        'Seek care within 24-48 hours',
-        'Keep a symptom diary'
-      ];
+    // Try AI analysis if OpenRouter API key is available
+    if (OPENROUTER_API_KEY && OPENROUTER_API_KEY !== 'your-openrouter-api-key-here') {
+      try {
+        console.log('Using OpenRouter AI (Llama 3.2) for symptom analysis...');
+        const aiResult = await analyzeWithAI(symptoms, ageRange, gender);
+        urgency = aiResult.urgency;
+        condition = aiResult.condition;
+        recommendations = aiResult.recommendations;
+      } catch (aiError) {
+        console.error('AI analysis failed, falling back to keyword analysis:', aiError.message);
+        // Fall back to keyword-based analysis
+        const fallback = keywordBasedAnalysis(symptoms, ageRange);
+        urgency = fallback.urgency;
+        condition = fallback.condition;
+        recommendations = fallback.recommendations;
+      }
+    } else {
+      // No OpenRouter API key, use enhanced keyword analysis
+      console.log('Using Enhanced Medical Keyword Analysis (no OpenRouter key)...');
+      const analysisResult = keywordBasedAnalysis(symptoms, ageRange);
+      urgency = analysisResult.urgency;
+      condition = analysisResult.condition;
+      recommendations = analysisResult.recommendations;
     }
 
     const analysis = {
       id: uuidv4(),
       userId: userId || 'anonymous',
       symptoms,
+      ageRange: ageRange || 'not specified',
+      gender: gender || 'not specified',
       urgency,
       condition,
       recommendations,
-      disclaimer: 'This is a preliminary assessment only. Always consult with a healthcare professional for proper diagnosis and treatment.',
+      disclaimer: 'This is not a substitute for professional medical care. Always consult with a qualified healthcare professional for proper diagnosis and treatment.',
       analyzedAt: new Date().toISOString()
     };
 
@@ -480,6 +709,136 @@ app.post('/api/symptoms/analyze', async (req, res) => {
     res.status(500).json({ error: 'Server error: ' + error.message });
   }
 });
+
+// Enhanced Medical Keyword-Based Analysis
+function keywordBasedAnalysis(symptoms, ageRange) {
+  let urgency = 'low';
+  let condition = 'Common Cold or Minor Illness';
+  let recommendations = [];
+
+  const symptomsLower = symptoms.toLowerCase();
+  const isVulnerable = ageRange === '0-12' || ageRange === '65+';
+  const isInfant = ageRange === '0-12';
+  const isElderly = ageRange === '65+';
+
+  // CRITICAL/EMERGENCY - High Urgency
+  const emergencySymptoms = [
+    { en: ['chest pain', 'crushing chest'], sw: ['maumivu ya kifua', 'kifua kinaumwa sana'] },
+    { en: ['difficulty breathing', 'can\'t breathe', 'shortness of breath'], sw: ['shida ya kupumua', 'kupumua vigumu'] },
+    { en: ['severe bleeding', 'heavy bleeding'], sw: ['damu nyingi', 'kutoka damu kwingi'] },
+    { en: ['unconscious', 'passed out', 'fainting'], sw: ['kuzimia', 'kuzirai'] },
+    { en: ['stroke', 'facial drooping', 'arm weakness', 'speech difficulty'], sw: ['kiharusi', 'uso kulegea'] },
+    { en: ['severe headache', 'worst headache'], sw: ['maumivu makali ya kichwa'] },
+    { en: ['confusion', 'disoriented', 'not making sense'], sw: ['kuchanganyikiwa', 'kukosa fahamu'] },
+    { en: ['seizure', 'convulsions'], sw: ['kifafa', 'degedege'] },
+    { en: ['severe abdominal pain'], sw: ['maumivu makali ya tumbo'] },
+    { en: ['coughing blood', 'vomiting blood'], sw: ['kutapika damu', 'kikohozi cha damu'] },
+  ];
+
+  // Check for emergency symptoms
+  for (const symptomGroup of emergencySymptoms) {
+    const allSymptoms = [...symptomGroup.en, ...symptomGroup.sw];
+    if (allSymptoms.some(s => symptomsLower.includes(s))) {
+      urgency = 'high';
+      condition = 'Medical Emergency - Immediate Attention Required';
+      recommendations = [
+        'Call emergency services immediately (999 or 112 in Kenya)',
+        'Do NOT drive yourself - wait for ambulance or get emergency transport',
+        'Stay calm and sit or lie down in a comfortable position',
+        'Do not take any medication unless advised by emergency services',
+        'Have someone stay with you while waiting for help'
+      ];
+      return { urgency, condition, recommendations };
+    }
+  }
+
+  // MEDIUM URGENCY - See Doctor Within 24-48 Hours
+  const mediumUrgencySymptoms = [
+    { en: ['high fever', 'fever above 39', 'fever over 102'], sw: ['homa kali', 'homa ya juu'] },
+    { en: ['persistent vomiting', 'can\'t keep food down'], sw: ['kutapika mara kwa mara', 'kutapika sana'] },
+    { en: ['severe diarrhea', 'bloody diarrhea', 'frequent diarrhea'], sw: ['kuharisha sana', 'kuhara damu'] },
+    { en: ['dehydration', 'very thirsty', 'dry mouth', 'dark urine'], sw: ['ukame wa mwili', 'mkavu'] },
+    { en: ['persistent pain', 'severe pain'], sw: ['maumivu ya muda mrefu', 'maumivu makali'] },
+    { en: ['rash with fever', 'spreading rash'], sw: ['upele na homa'] },
+    { en: ['stiff neck', 'neck pain with fever'], sw: ['shingo ngumu'] },
+    { en: ['difficulty swallowing'], sw: ['shida ya kumeza'] },
+    { en: ['persistent cough', 'cough for weeks'], sw: ['kikohozi cha muda mrefu'] },
+    { en: ['sudden weight loss'], sw: ['kupungua uzito ghafla'] },
+  ];
+
+  for (const symptomGroup of mediumUrgencySymptoms) {
+    const allSymptoms = [...symptomGroup.en, ...symptomGroup.sw];
+    if (allSymptoms.some(s => symptomsLower.includes(s))) {
+      urgency = 'medium';
+      condition = 'Condition Requiring Medical Attention';
+      recommendations = [
+        'Schedule a doctor\'s appointment within 24-48 hours',
+        'Keep track of your symptoms (write them down with times)',
+        'Stay well hydrated - drink clean water regularly',
+        'Rest and avoid strenuous activities',
+        'Monitor temperature if you have fever'
+      ];
+
+      // Escalate if vulnerable population
+      if (isVulnerable) {
+        urgency = 'high';
+        condition = isInfant ? 'Infant/Child - Requires Immediate Medical Care' : 'Elderly Patient - Requires Prompt Medical Care';
+        recommendations = [
+          'Seek medical care immediately - vulnerable age group',
+          'Go to the nearest clinic or hospital today',
+          'Do not delay treatment',
+          'Bring a list of all current medications',
+          'Have someone accompany you if possible'
+        ];
+      }
+
+      return { urgency, condition, recommendations };
+    }
+  }
+
+  // LOW URGENCY - Common Illnesses
+  const mildSymptoms = [
+    { en: ['headache', 'head hurts'], sw: ['maumivu ya kichwa', 'kichwa kinaumwa'] },
+    { en: ['mild fever', 'low fever', 'slight fever'], sw: ['homa kidogo', 'joto kidogo'] },
+    { en: ['cough', 'dry cough'], sw: ['kikohozi'] },
+    { en: ['runny nose', 'stuffy nose', 'congestion'], sw: ['pua inzambia', 'pua imeziba'] },
+    { en: ['sore throat', 'throat hurts'], sw: ['koo inaumwa', 'maumivu ya koo'] },
+    { en: ['body aches', 'muscle pain'], sw: ['maumivu ya mwili', 'misuli inaumwa'] },
+    { en: ['fatigue', 'tired', 'weak'], sw: ['uchovu', 'udhaifu'] },
+    { en: ['sneezing'], sw: ['kupiga chafya'] },
+    { en: ['mild nausea'], sw: ['kichefuchefu kidogo'] },
+  ];
+
+  for (const symptomGroup of mildSymptoms) {
+    const allSymptoms = [...symptomGroup.en, ...symptomGroup.sw];
+    if (allSymptoms.some(s => symptomsLower.includes(s))) {
+      urgency = 'low';
+      condition = 'Common Cold, Flu, or Minor Illness';
+      recommendations = [
+        'Rest at home and get plenty of sleep',
+        'Drink lots of fluids - water, herbal tea, or warm lemon water',
+        'Use over-the-counter pain relievers if needed (paracetamol/ibuprofen)',
+        'Stay home to avoid spreading illness to others',
+        'Gargle with warm salt water for sore throat',
+        'See a doctor if symptoms persist beyond 7 days or worsen'
+      ];
+      return { urgency, condition, recommendations };
+    }
+  }
+
+  // Default response if no specific symptoms matched
+  return {
+    urgency: 'low',
+    condition: 'General Health Concern',
+    recommendations: [
+      'Monitor your symptoms over the next 24-48 hours',
+      'Stay hydrated and get adequate rest',
+      'Consult a healthcare provider if symptoms persist or worsen',
+      'Keep a symptom diary noting when symptoms occur and their severity',
+      'Seek medical attention if you develop concerning symptoms'
+    ]
+  };
+}
 
 // Get symptom history
 app.get('/api/symptoms/history', authenticateToken, async (req, res) => {
@@ -507,3 +866,4 @@ app.listen(PORT, () => {
   console.log(`\n🏥 Safiri Afya Backend Server running on http://localhost:${PORT}`);
   console.log(`📊 Health check: http://localhost:${PORT}/api/health\n`);
 });
+
