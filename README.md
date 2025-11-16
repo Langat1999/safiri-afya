@@ -1,3 +1,63 @@
+Afya Karibu Kenya
+=================
+
+AI-powered symptom checker, clinic locator and appointment booking for Kenya.
+
+Quick start
+-----------
+
+Prerequisites: Node.js (16+), npm
+
+1. Install dependencies
+
+```powershell
+npm install
+```
+
+2. Run the dev server
+
+```powershell
+npm run dev
+```
+
+Backend (if present)
+---------------------
+
+See the `backend/` folder for backend-specific instructions.
+
+Prisma (development with SQLite)
+--------------------------------
+
+```powershell
+# open Prisma Studio
+npx prisma studio
+
+# run migrations (dev)
+npx prisma migrate dev --name init
+```
+
+Repository structure (high level)
+--------------------------------
+
+- `src/` — frontend React + TypeScript app
+- `backend/` — Node backend and Prisma setup
+- `public/` — static assets
+
+CI
+--
+
+This repo includes a basic GitHub Actions workflow at `.github/workflows/ci.yml` that installs dependencies and runs build/test steps when present.
+
+Contributing
+------------
+
+- Use feature branches and open pull requests.
+- Use issue templates in `.github/ISSUE_TEMPLATE/`.
+
+License
+-------
+
+Specify your project license here.
 # Welcome to your Lovable project
 
 ## Project info
