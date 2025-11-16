@@ -1,25 +1,25 @@
 # Render.com Configuration
 # This file allows infrastructure-as-code deployment to Render
 
-services:
+databases:
   # PostgreSQL Database
-  - type: pserv
-    name: safiri-afya-db
-    env: docker
+  - name: safiri-afya-db
     plan: starter # Change to 'free' for testing or 'standard' for production
     region: frankfurt # Choose: oregon, frankfurt, singapore, ohio
     databaseName: safiri_afya
-    databaseUser: safiri_afya_user
+    user: safiri_afya_user
     ipAllowList: [] # Empty means accessible from anywhere
 
+services:
   # Backend API Web Service
   - type: web
+    runtime: node
     name: safiri-afya-api
-    env: node
     region: frankfurt # Same as database for best performance
     plan: starter # Change to 'free' for testing or 'standard' for production
-    buildCommand: cd backend && npm install && npm run build
-    startCommand: cd backend && npm run deploy
+    rootDir: backend # Point to backend directory
+    buildCommand: npm install && npm run build
+    startCommand: npm run deploy
     healthCheckPath: /health
     envVars:
       - key: NODE_ENV
