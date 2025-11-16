@@ -18,9 +18,8 @@ services:
     env: node
     region: frankfurt # Same as database for best performance
     plan: starter # Change to 'free' for testing or 'standard' for production
-    rootDir: backend
-    buildCommand: npm install && npm run build
-    startCommand: npm run deploy
+    buildCommand: cd backend && npm install && npm run build
+    startCommand: cd backend && npm run deploy
     healthCheckPath: /health
     envVars:
       - key: NODE_ENV
