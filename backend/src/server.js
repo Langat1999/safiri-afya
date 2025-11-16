@@ -1080,8 +1080,6 @@ app.post('/api/symptoms/analyze', validate(analyzeSymptomsSchema), async (req, r
       return res.status(400).json({ error: 'Symptoms description is required' });
     }
 
-    await db.read();
-
     let urgency, condition, recommendations;
 
     // Try AI analysis if OpenRouter API key is available
@@ -1527,8 +1525,9 @@ app.post('/api/payments/mpesa/callback', async (req, res) => {
 // Check payment status
 app.get('/api/payments/:id/status', async (req, res) => {
   try {
-    await db.read();
-    const payment = db.data.payments.find(p => p.id === req.params.id);
+    const payment = await prisma.payment.findUnique({
+      where: { id: req.params.id }
+    });
 
     if (!payment) {
       return res.status(404).json({ error: 'Payment not found' });
@@ -1551,10 +1550,9 @@ app.get('/api/payments/:id/status', async (req, res) => {
 // Get payment by checkout request ID (for polling)
 app.get('/api/payments/checkout/:checkoutRequestId', async (req, res) => {
   try {
-    await db.read();
-    const payment = db.data.payments.find(
-      p => p.checkoutRequestId === req.params.checkoutRequestId
-    );
+    const payment = await prisma.payment.findFirst({
+      where: { checkoutRequestId: req.params.checkoutRequestId }
+    });
 
     if (!payment) {
       return res.status(404).json({ error: 'Payment not found' });

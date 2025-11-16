@@ -33,3 +33,6 @@ backend/data/
 
 # Claude Code
 .claude/
+
+# Local Netlify folder
+.netlify
