@@ -8,6 +8,7 @@
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
     "build": "prisma generate",
+    "vercel-build": "prisma generate",
     "deploy": "prisma migrate deploy && node src/server.js",
     "migrate": "prisma migrate deploy",
     "migrate:dev": "prisma migrate dev",

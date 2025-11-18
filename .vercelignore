@@ -17,9 +17,6 @@ tailwind.config.js
 *.log
 node_modules/
 
-# Backend generated files (will be generated during build)
-backend/generated/
-
 # Documentation
 README.md
 PITCH_DECK.md
