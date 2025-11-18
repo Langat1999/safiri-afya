@@ -5,7 +5,7 @@ databases:
   # PostgreSQL Database
   - name: safiri-afya-db
     plan: starter # Change to 'free' for testing or 'standard' for production
-    region: frankfurt # Choose: oregon, frankfurt, singapore, ohio
+    region: oregon # Changed to match existing database
     databaseName: safiri_afya
     user: safiri_afya_user
     ipAllowList: [] # Empty means accessible from anywhere
@@ -15,7 +15,7 @@ services:
   - type: web
     runtime: node
     name: safiri-afya-api
-    region: frankfurt # Same as database for best performance
+    region: oregon # Changed to match database region for best performance
     plan: starter # Change to 'free' for testing or 'standard' for production
     rootDir: backend # Point to backend directory
     buildCommand: npm install && npm run build
