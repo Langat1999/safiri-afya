@@ -60,8 +60,14 @@ app.use((req, res) => {
   res.status(404).json({ error: 'Endpoint not found' });
 });
 
-app.listen(config.port, () => {
-  console.log(`\n🏥 Safiri Afya Backend Server running on http://localhost:${config.port}`);
-  console.log(`📊 Health check: http://localhost:${config.port}/api/health\n`);
-});
+// For local development
+if (process.env.NODE_ENV !== 'production' || !process.env.VERCEL) {
+  app.listen(config.port, () => {
+    console.log(`\n🏥 Safiri Afya Backend Server running on http://localhost:${config.port}`);
+    console.log(`📊 Health check: http://localhost:${config.port}/api/health\n`);
+  });
+}
+
+// Export for Vercel serverless
+export default app;
 
