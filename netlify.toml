@@ -1,11 +1,3 @@
-[build]
-  command   = "npm run build"
-  publish   = "dist"
-
-[build.environment]
-  NODE_VERSION = "18"
-  # Skip secrets scanning for backend folder (deployed separately to Vercel)
-  SECRETS_SCAN_OMIT_PATHS = "backend/.env,backend/prisma"
-
-[context.production.environment]
-  VITE_API_URL = "https://safiri-afya-ui.vercel.app/api"
+# This project is now deployed on Vercel
+# Frontend and backend are hosted together on the same domain
+# See vercel.json for configuration

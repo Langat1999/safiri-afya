@@ -1,6 +1,7 @@
 {
   "version": 2,
-  "buildCommand": "cd backend && npm install && npm run build",
+  "buildCommand": "npm run build && cd backend && npm install && npm run build",
+  "outputDirectory": "dist",
   "builds": [
     {
       "src": "backend/src/server.js",
@@ -17,7 +18,7 @@
     },
     {
       "src": "/(.*)",
-      "dest": "backend/src/server.js"
+      "dest": "/index.html"
     }
   ],
   "env": {
