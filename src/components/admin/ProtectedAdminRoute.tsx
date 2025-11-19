@@ -24,8 +24,10 @@ export const ProtectedAdminRoute = ({ children }: ProtectedAdminRouteProps) => {
       try {
         const user = JSON.parse(userStr);
 
+        const normalizedRole = (user.role || '').toUpperCase();
+
         // Check if user has admin role
-        if (user.role === 'admin' || user.role === 'super_admin') {
+        if (normalizedRole === 'ADMIN' || normalizedRole === 'SUPER_ADMIN') {
           setIsAuthorized(true);
         } else {
           setIsAuthorized(false);

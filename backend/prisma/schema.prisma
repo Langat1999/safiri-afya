@@ -205,7 +205,7 @@ model Payment {
   bookingId           String
   amount              Int
   phoneNumber         String
-  checkoutRequestId   String?       // M-Pesa checkout request ID
+  checkoutRequestId   String?       @unique // M-Pesa checkout request ID
   mpesaReceiptNumber  String?
   transactionId       String?
   status              PaymentStatus @default(PENDING)

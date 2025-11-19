@@ -35,8 +35,10 @@ export const AdminLogin = () => {
         throw new Error(data.error || 'Login failed');
       }
 
+      const normalizedRole = (data.user.role || '').toUpperCase();
+
       // Check if user has admin role
-      if (data.user.role !== 'admin' && data.user.role !== 'super_admin') {
+      if (!['ADMIN', 'SUPER_ADMIN'].includes(normalizedRole)) {
         toast.error('Access denied. Admin privileges required.');
         setIsLoading(false);
         return;
@@ -44,7 +46,7 @@ export const AdminLogin = () => {
 
       // Store token and user data
       localStorage.setItem('adminToken', data.token);
-      localStorage.setItem('adminUser', JSON.stringify(data.user));
+      localStorage.setItem('adminUser', JSON.stringify({ ...data.user, role: normalizedRole }));
 
       toast.success('Login successful!');
       navigate('/admin/dashboard');
