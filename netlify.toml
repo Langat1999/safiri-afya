@@ -12,6 +12,12 @@
   [build.environment]
     NODE_VERSION = "22"
 
+# Secrets scanning configuration
+# VITE_ environment variables are meant to be public in the frontend bundle
+[build.processing.secrets]
+  enabled = true
+  ignored = "VITE_API_URL"
+
 # SPA Routing - Redirect all routes to index.html for React Router
 [[redirects]]
   from = "/*"
