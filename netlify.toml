@@ -8,15 +8,11 @@
   # Output directory where Vite builds to
   publish = "dist"
 
-  # Node.js version
+  # Node.js version and secrets scanning config
   [build.environment]
     NODE_VERSION = "22"
-
-# Secrets scanning configuration
-# VITE_ environment variables are meant to be public in the frontend bundle
-[build.processing.secrets]
-  enabled = true
-  ignored = "VITE_API_URL"
+    # VITE_ variables are meant to be public in frontend bundle
+    SECRETS_SCAN_OMIT_KEYS = "VITE_API_URL"
 
 # SPA Routing - Redirect all routes to index.html for React Router
 [[redirects]]
