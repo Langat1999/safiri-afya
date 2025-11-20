@@ -18,25 +18,37 @@ Full-stack healthcare platform connecting Kenyans to quality medical services. F
 
 ### Architecture
 ```
-┌────────────────────────────┐
-│   Vercel (Same Domain)     │
-│   ├─ Frontend (React)      │
-│   └─ Backend API (Node.js) │
-└───────────┬────────────────┘
-            │
-            ▼
-     ┌─────────────┐
-     │  Supabase   │
-     │  PostgreSQL │
-     └─────────────┘
+┌──────────────────────────────┐
+│   Netlify (Frontend)         │
+│   React SPA + Vite           │
+│   safiriafya.netlify.app     │
+└─────────────┬────────────────┘
+              │
+              │ HTTPS/CORS
+              │ API Calls
+              ▼
+┌──────────────────────────────┐
+│   Vercel (Backend API)       │
+│   Express.js Serverless      │
+│   safiri-afya.vercel.app/api │
+└─────────────┬────────────────┘
+              │
+              │ Prisma ORM
+              │ Connection Pooling
+              ▼
+┌──────────────────────────────┐
+│   Supabase (Database)        │
+│   PostgreSQL + pgbouncer     │
+└──────────────────────────────┘
 ```
 
-**Benefits:** No CORS issues, faster API calls, single platform, 100% free!
+**Benefits:** Global CDN (Netlify Edge), serverless auto-scaling (Vercel), robust database (Supabase), 100% free tier!
 
 ### Prerequisites
 - GitHub account
-- [Supabase account](https://supabase.com/) (free tier: 500MB database)
+- [Netlify account](https://netlify.com/) (free tier: 100GB bandwidth)
 - [Vercel account](https://vercel.com/) (free tier: 100GB bandwidth)
+- [Supabase account](https://supabase.com/) (free tier: 500MB database)
 - M-Pesa sandbox credentials from [Safaricom](https://developer.safaricom.co.ke/)
 
 ### Step 1: Create Supabase Database (3 min)
@@ -48,31 +60,72 @@ Full-stack healthcare platform connecting Kenyans to quality medical services. F
    - **Session mode (port 6543):** Add `?pgbouncer=true` → Save as `DATABASE_URL`
    - **Transaction mode (port 5432):** Save as `DIRECT_URL`
 
-### Step 2: Deploy on Vercel (5 min)
+### Step 2: Deploy Backend on Vercel (5 min)
 
 1. Go to https://vercel.com/new → **"Import Git Repository"**
-2. Select `Langat1999/safiri-afya-ui` → **Deploy**
-3. Go to **Settings → Environment Variables** and add all variables from [VERCEL_DEPLOYMENT.md](VERCEL_DEPLOYMENT.md)
+2. Select `Langat1999/safiri-afya-ui` → Configure as follows:
+   - **Framework Preset:** Other
+   - **Root Directory:** `backend`
+   - **Build Command:** `npm install && npm run build`
+   - **Output Directory:** Leave empty (serverless functions)
+3. Go to **Settings → Environment Variables** and add:
 
-**Key Variables:**
+**Backend Environment Variables:**
 ```bash
+# Database (Required)
 DATABASE_URL=postgresql://postgres.xxxxx:[PASSWORD]@...pooler.supabase.com:6543/postgres?pgbouncer=true
 DIRECT_URL=postgresql://postgres.xxxxx:[PASSWORD]@...pooler.supabase.com:5432/postgres
+
+# Server Config (Required)
 NODE_ENV=production
-JWT_SECRET=your-64-char-secret
-MPESA_CONSUMER_KEY=your_key
-MPESA_CONSUMER_SECRET=your_secret
-MPESA_PASSKEY=your_passkey
+PORT=3001
+JWT_SECRET=your-64-char-secret-min-32-chars
+
+# M-Pesa Integration (Required)
+MPESA_CONSUMER_KEY=your_mpesa_key
+MPESA_CONSUMER_SECRET=your_mpesa_secret
+MPESA_PASSKEY=your_mpesa_passkey
 MPESA_SHORTCODE=174379
-MPESA_CALLBACK_URL=https://YOUR-VERCEL-DOMAIN.vercel.app/api/payments/mpesa/callback
-MPESA_RESULT_URL=https://YOUR-VERCEL-DOMAIN.vercel.app/api/payments/mpesa/result
-ALLOWED_ORIGINS=https://YOUR-VERCEL-DOMAIN.vercel.app
-APP_URL=https://YOUR-VERCEL-DOMAIN.vercel.app
+MPESA_CALLBACK_URL=https://your-backend.vercel.app/api/payments/mpesa/callback
+MPESA_RESULT_URL=https://your-backend.vercel.app/api/payments/mpesa/result
+
+# CORS & Security (Required - UPDATE AFTER NETLIFY DEPLOYMENT)
+ALLOWED_ORIGINS=https://your-frontend.netlify.app
+APP_URL=https://your-frontend.netlify.app
+
+# Optional Services
+OPENROUTER_API_KEY=your_key        # AI symptom checker
+GUARDIAN_API_KEY=your_key          # Health news
+SENDGRID_API_KEY=your_key          # Email service
+FROM_EMAIL=noreply@safiriafya.com
+DEVELOPER_MPESA_NUMBER=254XXXXXXXXX
+DEVELOPER_COMMISSION_PERCENTAGE=15
 ```
 
-4. **Deployments → Redeploy**
+4. **Deploy** → Note your Vercel backend URL (e.g., `https://safiri-afya.vercel.app`)
 
-### Step 3: Seed Database (2 min)
+### Step 3: Deploy Frontend on Netlify (4 min)
+
+1. Go to https://app.netlify.com/ → **"Add new site" → "Import an existing project"**
+2. Connect to GitHub → Select `Langat1999/safiri-afya-ui`
+3. Configure build settings:
+   - **Build command:** `npm run build:frontend`
+   - **Publish directory:** `dist`
+4. Add Environment Variables:
+   - `VITE_API_URL` = `https://your-backend.vercel.app/api` (your Vercel backend URL from Step 2)
+   - `NODE_VERSION` = `22`
+   - `SECRETS_SCAN_OMIT_KEYS` = `VITE_API_URL`
+5. **Deploy site** → Note your Netlify URL (e.g., `https://safiriafya.netlify.app`)
+
+### Step 4: Update CORS Settings (2 min)
+
+1. Go back to **Vercel** → Your backend project → **Settings → Environment Variables**
+2. Update these variables with your actual Netlify URL:
+   - `ALLOWED_ORIGINS` = `https://your-actual-frontend.netlify.app`
+   - `APP_URL` = `https://your-actual-frontend.netlify.app`
+3. **Deployments → Redeploy** to apply changes
+
+### Step 5: Seed Database (2 min)
 
 ```bash
 # Local terminal
@@ -82,19 +135,24 @@ DIRECT_URL="your-supabase-direct-url" npm run seed
 
 Adds: 8 clinics + 10 doctors + admin (admin@safiriafya.com / Admin@123456)
 
-### Step 4: Test Your Deployment
+### Step 6: Test Your Deployment
 
 ```bash
-# Test backend
-curl https://YOUR-VERCEL-DOMAIN.vercel.app/api/health
+# Test backend API
+curl https://your-backend.vercel.app/api/health
+
+# Expected response:
+# {"status":"healthy","timestamp":"...","database":"connected"}
 
 # Open frontend
-# Visit: https://YOUR-VERCEL-DOMAIN.vercel.app
+# Visit: https://your-frontend.netlify.app
 ```
 
-**Done! 🎉** Your healthcare platform is live!
+**Done! 🎉** Your healthcare platform is live on split architecture!
 
-📖 **Full Guide:** [VERCEL_DEPLOYMENT.md](VERCEL_DEPLOYMENT.md) - Complete setup with troubleshooting
+📖 **Full Guides:**
+- [DEPLOYMENT_GUIDE_SPLIT.md](Documents/DEPLOYMENT_GUIDE_SPLIT.md) - Complete split deployment guide
+- [QUICK_DEPLOY_REFERENCE.md](Documents/QUICK_DEPLOY_REFERENCE.md) - Quick reference
 
 ---
 
@@ -116,7 +174,7 @@ curl https://YOUR-VERCEL-DOMAIN.vercel.app/api/health
 **Backend:** Node.js 18 + Express 5 + Vercel Serverless
 **Database:** Supabase PostgreSQL (free tier: 500MB)
 **Services:** M-Pesa Daraja, SendGrid, OpenRouter AI
-**Deploy:** **Vercel** (Frontend + Backend) + **Supabase** (Database) - **100% FREE!**
+**Deploy:** **Netlify** (Frontend) + **Vercel** (Backend API) + **Supabase** (Database) - **100% FREE!**
 
 ---
 
@@ -171,24 +229,40 @@ npm run backend:dev  # http://localhost:3001
 
 ## 🔐 Environment Variables
 
-### Production (Vercel Dashboard)
-All variables must be added in Vercel Dashboard → Settings → Environment Variables
+### Production - Netlify (Frontend)
+Add in Netlify Dashboard → Site settings → Environment variables:
+
+```bash
+VITE_API_URL=https://your-backend.vercel.app/api
+NODE_VERSION=22
+SECRETS_SCAN_OMIT_KEYS=VITE_API_URL
+```
+
+### Production - Vercel (Backend)
+Add in Vercel Dashboard → Settings → Environment Variables:
 
 **Required:**
 ```bash
+# Database
 DATABASE_URL=postgresql://...?pgbouncer=true
 DIRECT_URL=postgresql://...
+
+# Server Config
 NODE_ENV=production
 PORT=3001
-JWT_SECRET=64-char-secret
+JWT_SECRET=64-char-secret-min-32-chars
+
+# M-Pesa Integration
 MPESA_CONSUMER_KEY=...
 MPESA_CONSUMER_SECRET=...
 MPESA_PASSKEY=...
 MPESA_SHORTCODE=174379
-MPESA_CALLBACK_URL=https://YOUR-DOMAIN.vercel.app/api/payments/mpesa/callback
-MPESA_RESULT_URL=https://YOUR-DOMAIN.vercel.app/api/payments/mpesa/result
-ALLOWED_ORIGINS=https://YOUR-DOMAIN.vercel.app
-APP_URL=https://YOUR-DOMAIN.vercel.app
+MPESA_CALLBACK_URL=https://your-backend.vercel.app/api/payments/mpesa/callback
+MPESA_RESULT_URL=https://your-backend.vercel.app/api/payments/mpesa/result
+
+# CORS & Security (use your Netlify URL)
+ALLOWED_ORIGINS=https://your-frontend.netlify.app
+APP_URL=https://your-frontend.netlify.app
 ```
 
 **Optional (Recommended):**
@@ -216,18 +290,30 @@ Backend already has `backend/.env` with all required variables.
 ```
 safiri-afya-ui/
 ├── src/                    # Frontend React app
+│   ├── components/        # React components
+│   ├── pages/            # Page components
+│   ├── lib/              # Utilities, API client
+│   └── assets/           # Images, styles
 ├── backend/                # Backend Node.js API
 │   ├── src/
 │   │   ├── server.js      # Main API entry (deployed to Vercel)
+│   │   ├── routes/        # API route handlers
 │   │   ├── middleware/    # Auth, validation
-│   │   ├── services/      # M-Pesa, email
+│   │   ├── services/      # M-Pesa, email, AI
 │   │   └── prismadb.js    # Database client
 │   ├── prisma/
 │   │   ├── schema.prisma  # Database schema
-│   │   └── migrations/    # Database migrations
-│   └── package.json
-├── dist/                   # Frontend build output (deployed to Vercel)
-├── vercel.json            # Vercel configuration
+│   │   ├── migrations/    # Database migrations
+│   │   └── seed.js        # Database seeding
+│   ├── vercel.json        # Backend Vercel config
+│   └── package.json       # Backend dependencies
+├── dist/                   # Frontend build output (deployed to Netlify)
+├── Documents/              # Project documentation
+│   ├── PROJECT_PITCH.md
+│   ├── TECHNICAL_ARCHITECTURE.md
+│   ├── DEPLOYMENT_GUIDE_SPLIT.md
+│   └── QUICK_DEPLOY_REFERENCE.md
+├── netlify.toml           # Netlify frontend config
 └── package.json           # Frontend dependencies
 ```
 
@@ -236,14 +322,28 @@ safiri-afya-ui/
 ## 🚀 Deployment
 
 ### Automatic (Recommended)
-Push to `main` branch → Vercel auto-deploys
+Push to `main` branch:
+- **Netlify** auto-deploys frontend
+- **Vercel** auto-deploys backend API
 
 ### Manual
+
+**Frontend (Netlify):**
+```bash
+# Install Netlify CLI
+npm i -g netlify-cli
+
+# Deploy
+netlify deploy --prod
+```
+
+**Backend (Vercel):**
 ```bash
 # Install Vercel CLI
 npm i -g vercel
 
-# Deploy
+# Deploy from backend directory
+cd backend
 vercel --prod
 ```
 
@@ -251,25 +351,53 @@ vercel --prod
 
 ## 🔧 Configuration Files
 
-### vercel.json
+### netlify.toml (Frontend)
+```toml
+[build]
+  command = "npm run build:frontend"
+  publish = "dist"
+
+  [build.environment]
+    NODE_VERSION = "22"
+    SECRETS_SCAN_OMIT_KEYS = "VITE_API_URL"
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+```
+
+Routes: All routes → React SPA (client-side routing)
+
+### backend/vercel.json (Backend)
 ```json
 {
-  "buildCommand": "npm run build && cd backend && npm install && npm run build",
-  "outputDirectory": "dist",
+  "version": 2,
+  "builds": [
+    {
+      "src": "src/server.js",
+      "use": "@vercel/node"
+    }
+  ],
   "routes": [
-    { "src": "/api/(.*)", "dest": "backend/src/server.js" },
-    { "src": "/(.*)", "dest": "/index.html" }
+    {
+      "src": "/api/(.*)",
+      "dest": "/src/server.js"
+    }
   ]
 }
 ```
 
-Routes:
-- `/api/*` → Backend serverless functions
-- Everything else → Frontend React SPA
+Routes: All `/api/*` routes → Express serverless functions
 
-### .env.production
+### .env (Frontend - Local)
 ```bash
-VITE_API_URL=/api  # Relative path (same domain)
+VITE_API_URL=http://localhost:3001/api
+```
+
+### .env (Frontend - Production/Netlify)
+```bash
+VITE_API_URL=https://safiri-afya.vercel.app/api
 ```
 
 ---
@@ -310,45 +438,69 @@ curl http://localhost:3001/api/clinics
 
 ## 🛠️ Troubleshooting
 
-### API returns 404
+### Frontend (Netlify) Issues
+
+**Build fails with secrets scanning error:**
+- Ensure `SECRETS_SCAN_OMIT_KEYS=VITE_API_URL` is set in Netlify environment variables
+- VITE_ variables are meant to be public in frontend bundle
+
+**API calls fail (Network errors):**
+- Verify `VITE_API_URL` in Netlify points to correct Vercel backend URL
+- Example: `https://safiri-afya.vercel.app/api`
+
+### Backend (Vercel) Issues
+
+**API returns 404:**
 - Ensure environment variables are set in Vercel
 - Check deployment logs for errors
-- Verify `vercel.json` routes configuration
+- Verify `backend/vercel.json` configuration
 
-### CORS errors
-- Add your Vercel domain to `ALLOWED_ORIGINS`
-- Redeploy after updating environment variables
+**CORS errors:**
+- Update `ALLOWED_ORIGINS` in Vercel to include your Netlify URL
+- Example: `https://safiriafya.netlify.app`
+- Redeploy backend after updating environment variables
 
-### Database connection errors
+**Database connection errors:**
 - Verify `DATABASE_URL` and `DIRECT_URL` in Vercel
 - Check Supabase dashboard for connection string format
-- Ensure password is URL-encoded (# → %23)
+- Ensure password is URL-encoded (# → %23, @ → %40)
 
-### Build fails
+### Build Issues
+
+**Netlify build fails:**
+- Check build logs for dependency errors
+- Verify `NODE_VERSION=22` is set
+- Ensure `npm run build:frontend` script exists
+
+**Vercel build fails:**
 - Check Vercel build logs
-- Verify `package.json` scripts are correct
+- Verify `package.json` scripts in backend folder
 - Ensure Prisma client generation succeeds
 
-**Full troubleshooting guide:** [VERCEL_DEPLOYMENT.md](VERCEL_DEPLOYMENT.md)
+**Full troubleshooting guides:**
+- [DEPLOYMENT_GUIDE_SPLIT.md](Documents/DEPLOYMENT_GUIDE_SPLIT.md)
+- [QUICK_DEPLOY_REFERENCE.md](Documents/QUICK_DEPLOY_REFERENCE.md)
 
 ---
 
 ## 💰 Cost (Free Tier)
 
-| Service | Free Tier | Monthly Limit |
-|---------|-----------|---------------|
-| **Vercel** | 100GB bandwidth | Unlimited requests |
-| **Supabase** | 500MB database | 2GB bandwidth |
-| **Total** | **$0/month** | Supports 10K-50K users |
+| Service | Free Tier | Monthly Limit | Usage |
+|---------|-----------|---------------|-------|
+| **Netlify** | 100GB bandwidth | 300 build minutes | Frontend hosting |
+| **Vercel** | 100GB bandwidth | Unlimited requests | Backend API |
+| **Supabase** | 500MB database | 2GB bandwidth | PostgreSQL database |
+| **Total** | **$0/month** | Supports 10K-50K users | Full-stack app |
 
 ---
 
 ## 📈 Performance
 
-- **Frontend:** Global CDN (Vercel Edge)
-- **Backend:** Serverless functions (auto-scaling)
-- **Database:** Connection pooling (pgbouncer)
-- **API Response:** < 200ms (same-origin requests)
+- **Frontend:** Global CDN (Netlify Edge Network) - Sub-50ms static content
+- **Backend:** Serverless functions (Vercel) - Auto-scaling, cold start ~200ms
+- **Database:** Connection pooling (pgbouncer) - Optimized for serverless
+- **API Response:** < 300ms (cross-origin HTTPS requests)
+- **SSL/HTTPS:** Automatic on both Netlify and Vercel
 
 ---
 
@@ -366,9 +518,18 @@ curl http://localhost:3001/api/clinics
 
 ## 📖 Documentation
 
-- [VERCEL_DEPLOYMENT.md](VERCEL_DEPLOYMENT.md) - Complete deployment guide
+### Deployment Guides
+- [DEPLOYMENT_GUIDE_SPLIT.md](Documents/DEPLOYMENT_GUIDE_SPLIT.md) - Complete split deployment guide (Netlify + Vercel)
+- [QUICK_DEPLOY_REFERENCE.md](Documents/QUICK_DEPLOY_REFERENCE.md) - Quick deployment reference
+
+### Project Documentation
+- [PROJECT_PITCH.md](Documents/PROJECT_PITCH.md) - Investor pitch deck & market analysis
+- [TECHNICAL_ARCHITECTURE.md](Documents/TECHNICAL_ARCHITECTURE.md) - System architecture documentation
+
+### Technical References
 - [backend/prisma/schema.prisma](backend/prisma/schema.prisma) - Database schema
-- [vercel.json](vercel.json) - Deployment configuration
+- [netlify.toml](netlify.toml) - Frontend deployment configuration
+- [backend/vercel.json](backend/vercel.json) - Backend deployment configuration
 
 ---
 
@@ -392,7 +553,8 @@ MIT License - See [LICENSE](LICENSE) for details
 
 - **Issues:** https://github.com/Langat1999/safiri-afya-ui/issues
 - **Email:** info@safiriafya.com
-- **Docs:** [VERCEL_DEPLOYMENT.md](VERCEL_DEPLOYMENT.md)
+- **Live Demo:** https://safiriafya.netlify.app
+- **API Health:** https://safiri-afya.vercel.app/api/health
 
 ---
 
@@ -400,14 +562,33 @@ MIT License - See [LICENSE](LICENSE) for details
 
 Before going live:
 
-- [ ] All environment variables set in Vercel
-- [ ] M-Pesa switched to production mode
-- [ ] Custom domain configured (optional)
-- [ ] Database backed up
-- [ ] SSL/HTTPS enabled (automatic)
-- [ ] Error tracking configured (Sentry)
-- [ ] Test all features end-to-end
+**Backend (Vercel):**
+- [ ] All environment variables set in Vercel dashboard
+- [ ] `ALLOWED_ORIGINS` includes production Netlify URL
+- [ ] `MPESA_CALLBACK_URL` points to Vercel backend
+- [ ] Database seeded with initial data
+- [ ] API health check returns success
+
+**Frontend (Netlify):**
+- [ ] `VITE_API_URL` points to production Vercel backend
+- [ ] `SECRETS_SCAN_OMIT_KEYS` configured
+- [ ] Build completes successfully
+- [ ] All pages load correctly
+
+**General:**
+- [ ] M-Pesa switched to production mode (not sandbox)
 - [ ] Update M-Pesa callback URLs in Safaricom portal
+- [ ] Custom domains configured (optional)
+- [ ] Database backed up on Supabase
+- [ ] SSL/HTTPS enabled (automatic on both platforms)
+- [ ] Error tracking configured (Sentry recommended)
+- [ ] Test all features end-to-end:
+  - [ ] User registration & login
+  - [ ] Clinic search & filtering
+  - [ ] Appointment booking
+  - [ ] M-Pesa payment flow
+  - [ ] AI symptom checker
+  - [ ] Admin dashboard
 
 ---
 
