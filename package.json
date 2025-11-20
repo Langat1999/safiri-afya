@@ -5,8 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build && npm run build:backend",
-    "build:backend": "cd backend && npm install && npm run build",
+    "build": "vite build",
+    "postbuild": "cd backend && npm install && npm run build",
     "build:dev": "vite build --mode development",
     "build:frontend": "vite build",
     "lint": "eslint .",
@@ -14,8 +14,7 @@
     "start": "cd backend && npm start",
     "backend:dev": "cd backend && npm run dev",
     "backend:deploy": "cd backend && npm run deploy",
-    "backend:migrate": "cd backend && npm run migrate",
-    "vercel-build": "npm run build"
+    "backend:migrate": "cd backend && npm run migrate"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
