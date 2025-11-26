@@ -3,6 +3,31 @@ import prisma from '../prismadb.js';
 
 const router = express.Router();
 
+/**
+ * @swagger
+ * tags:
+ *   name: Health
+ *   description: Health check endpoints
+ */
+
+/**
+ * @swagger
+ * /health:
+ *   get:
+ *     summary: Basic health check
+ *     tags: [Health]
+ *     responses:
+ *       200:
+ *         description: API is healthy
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: string
+ *                   example: healthy
+ */
 router.get('/', (req, res) => {
   res.json({
     status: 'healthy',
@@ -11,6 +36,32 @@ router.get('/', (req, res) => {
   });
 });
 
+/**
+ * @swagger
+ * /health/status:
+ *   get:
+ *     summary: Detailed system status check
+ *     tags: [Health]
+ *     responses:
+ *       200:
+ *         description: System status including database connection
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: string
+ *                   example: ok
+ *                 timestamp:
+ *                   type: string
+ *                   format: date-time
+ *                 database:
+ *                   type: string
+ *                   example: connected
+ *       503:
+ *         description: System unavailable
+ */
 router.get('/status', async (req, res) => {
   const status = {
     database: 'unknown',
@@ -32,4 +83,3 @@ router.get('/status', async (req, res) => {
 });
 
 export default router;
-
